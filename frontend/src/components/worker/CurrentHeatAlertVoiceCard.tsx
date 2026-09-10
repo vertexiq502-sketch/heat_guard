@@ -1,7 +1,12 @@
 import React from 'react';
 import { useLocalization } from '../../hooks/useLocalization';
 import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
-import { generateVoiceAlertScript, type VoiceAlertContext } from '../../utils/voiceAlertGenerator';
+import { useAuthStore } from '../../store/authStore';
+import {
+  generateVoiceAlertScript,
+  resolveUserLanguage,
+  type VoiceAlertContext,
+} from '../../utils/voiceAlertGenerator';
 import {
   Volume2,
   Square,
@@ -34,9 +39,14 @@ export const CurrentHeatAlertVoiceCard: React.FC<CurrentHeatAlertVoiceCardProps>
 }) => {
   const { t, language: uiLanguage } = useLocalization();
   const { isSupported, isSpeaking, voiceUnavailable, speak, stop } = useSpeechSynthesis();
+  const authUser = useAuthStore((state) => state.user);
 
-  // Selected language preference from worker profile in users table (with uiLanguage fallback)
-  const effectiveLanguage = (workerLanguage || uiLanguage || 'en').toLowerCase().trim();
+  // Authoritative language resolution: checks active UI selection, localStorage, worker profile, and authStore
+  const effectiveLanguage = resolveUserLanguage(
+    { ...profile, language: workerLanguage || profile?.language },
+    authUser,
+    uiLanguage
+  );
 
   // Normalize risk data
   const rawLevel = (risk?.risk_level || 'green').toLowerCase();

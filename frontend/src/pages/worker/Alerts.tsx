@@ -18,12 +18,14 @@ export const Alerts = () => {
   const [isTriggeringVoice, setIsTriggeringVoice] = useState(false);
   const [voiceSuccessMsg, setVoiceSuccessMsg] = useState<string | null>(null);
 
-  // Sync worker's selected language from users table
+  // Sync worker's selected language from users table only if no local preference is stored
   useEffect(() => {
-    if (data?.profile?.language) {
-      setAppLanguage(data.profile.language);
+    const profileLang = data?.profile?.language || data?.profile?.preferred_language;
+    const storedLang = typeof window !== 'undefined' ? localStorage.getItem('heatguard_lang') : null;
+    if (profileLang && !storedLang) {
+      setAppLanguage(profileLang);
     }
-  }, [data?.profile?.language]);
+  }, [data?.profile?.language, data?.profile?.preferred_language]);
 
   if (isLoading) {
     return (

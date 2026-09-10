@@ -144,6 +144,15 @@ export const useSpeechSynthesis = (): UseSpeechSynthesisReturn => {
       utterance.rate = 0.93; // slightly deliberate for emergency clarity in outdoor noisy environments
       utterance.pitch = 1.02;
 
+      if (import.meta.env.DEV) {
+        console.log('[SpeechSynthesis Debug]', {
+          selectedLanguage: targetLang,
+          speechLocale: utterance.lang,
+          spokenText: cleaned,
+          selectedVoice: matchedVoice ? `${matchedVoice.name} (${matchedVoice.lang})` : 'System Default / Unassigned',
+        });
+      }
+
       utterance.onstart = () => {
         setIsSpeaking(true);
         setVoiceUnavailable(false);

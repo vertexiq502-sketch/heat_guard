@@ -3,6 +3,7 @@ import { useLocalization } from '../../hooks/useLocalization';
 import { useAuthStore } from '../../store/authStore';
 import { apiClient } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
+import { resolveUserLanguage } from '../../utils/voiceAlertGenerator';
 import { Volume2, VolumeX, Radio, Check } from 'lucide-react';
 
 export interface AlertCardProps {
@@ -42,38 +43,58 @@ export const AlertCard = ({
   const [isAcknowledgedLocally, setIsAcknowledgedLocally] = useState(false);
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
-  // The worker's selected language fetched from the users table (fallback to authStore, then uiLanguage)
-  const effectiveLanguage = (workerLanguage || authUser?.language || uiLanguage || 'en').toLowerCase().trim();
+  // Authoritative language resolution: checks active UI, localStorage, profile, and authStore
+  const effectiveLanguage = resolveUserLanguage(
+    { language: workerLanguage },
+    authUser,
+    uiLanguage
+  );
 
   // Consistent Severity Terminology: SAFE, CAUTION, DANGER
   const normType = (alert.type || '').toLowerCase();
   const normSev = (alert.severity || '').toLowerCase();
+  const isDangerSev = normType === 'danger' || normSev === 'critical';
+  const isCautionSev = normType === 'high_risk' || normType === 'caution' || normSev === 'warning';
 
-  // Localized content strictly bound to the worker's selected language from users table
+  // Localized content strictly bound to the worker's selected language
   let title = alert.title;
   let message = alert.message;
 
   if (effectiveLanguage === 'te') {
-    title = alert.title_te || alert.title;
+    title = (alert.title_te && /[\u0C00-\u0C7F]/.test(alert.title_te))
+      ? alert.title_te
+      : isDangerSev
+      ? 'తీవ్రమైన వేడి హెచ్చరిక'
+      : isCautionSev
+      ? 'వేడి హెచ్చరిక'
+      : 'వేడి భద్రతా సమాచారం';
+
     if (alert.message_te && /[\u0C00-\u0C7F]/.test(alert.message_te)) {
       message = alert.message_te;
-    } else if (normType === 'danger' || normSev === 'critical') {
-      message = 'ఉష్ణోగ్రత 45 డిగ్రీలు దాటింది. వెంటనే బయట పని ఆపి నీడ ప్రదేశానికి వెళ్ళండి. పుష్కలంగా నీరు మరియు ఓఆర్ఎస్ త్రాగండి.';
-    } else if (normType === 'high_risk' || normType === 'caution' || normSev === 'warning') {
-      message = 'ఉష్ణోగ్రత మరియు వేడి సూచిక హెచ్చరిక స్థాయికి చేరుకున్నాయి. ప్రతి గంటకు నీరు త్రాగండి మరియు నీడలో విశ్రాంతి తీసుకోండి.';
+    } else if (isDangerSev) {
+      message = 'ఉష్ణోగ్రత మరియు వేడి సూచిక ప్రమాదకర స్థాయికి చేరుకున్నాయి. వెంటనే పని ఆపి నీడ ప్రదేశానికి వెళ్లి పుష్కలంగా నీరు లేదా ఓఆర్ఎస్ త్రాగండి.';
+    } else if (isCautionSev) {
+      message = 'వేడి తీవ్రత ఎక్కువగా ఉంది. ప్రతి గంటకు నీరు త్రాగండి మరియు నీడలో తగినంత విశ్రాంతి తీసుకోండి.';
     } else {
-      message = alert.message_te || alert.message;
+      message = 'వాతావరణ పరిస్థితులను గమనిస్తూ సురక్షితంగా పని చేయండి మరియు తగినంత నీరు త్రాగండి.';
     }
   } else if (effectiveLanguage === 'hi') {
-    title = alert.title_hi || alert.title;
+    title = (alert.title_hi && /[\u0900-\u097F]/.test(alert.title_hi))
+      ? alert.title_hi
+      : isDangerSev
+      ? 'गंभीर हीट अलर्ट'
+      : isCautionSev
+      ? 'हीट चेतावनी'
+      : 'हीट सुरक्षा सूचना';
+
     if (alert.message_hi && /[\u0900-\u097F]/.test(alert.message_hi)) {
       message = alert.message_hi;
-    } else if (normType === 'danger' || normSev === 'critical') {
-      message = 'प्रभावी तापमान 45 डिग्री से अधिक हो गया है। तुरंत काम रोकें और छायादार आश्रय में जाएं। ओआरएस और पानी पिएं।';
-    } else if (normType === 'high_risk' || normType === 'caution' || normSev === 'warning') {
-      message = 'तापमान और हीट इंडेक्स चेतावनी स्तर पर पहुंच गया है। पर्याप्त पानी पिएं और छाया में नियमित विश्राम लें।';
+    } else if (isDangerSev) {
+      message = 'प्रभावी तापमान खतरनाक स्तर पर पहुंच गया है। तुरंत काम रोकें और छायादार आश्रय में जाएं। पर्याप्त पानी और ओआरएस पिएं।';
+    } else if (isCautionSev) {
+      message = 'तापमान और हीट इंडेक्स चेतावनी स्तर पर है। पर्याप्त पानी पिएं और छाया में नियमित विश्राम लें।';
     } else {
-      message = alert.message_hi || alert.message;
+      message = 'मौसम की स्थिति का ध्यान रखें और काम के दौरान नियमित पानी पीते रहें।';
     }
   }
 

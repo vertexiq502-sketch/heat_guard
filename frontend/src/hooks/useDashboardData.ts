@@ -31,12 +31,14 @@ export const useWorkerData = () => {
     queryFn: async () => {
       const response = await apiClient.get('/dashboard/worker');
       const profile = response.data?.profile;
-      if (profile?.language) {
-        setAppLanguage(profile.language);
-        const currentAuth = useAuthStore.getState().user;
-        if (currentAuth) {
-          useAuthStore.getState().setUser({ ...currentAuth, ...profile });
-        }
+      const storedLang = typeof window !== 'undefined' ? localStorage.getItem('heatguard_lang') : null;
+      const profileLang = profile?.language || profile?.preferred_language;
+      if (profileLang && !storedLang) {
+        setAppLanguage(profileLang);
+      }
+      const currentAuth = useAuthStore.getState().user;
+      if (currentAuth && profile) {
+        useAuthStore.getState().setUser({ ...currentAuth, ...profile });
       }
       return response.data;
     },
