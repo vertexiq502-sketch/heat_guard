@@ -33,13 +33,13 @@ npm run dev
 
 ## Demo Credentials
 
-You can test the end-to-end flow using these seeded demo accounts. The passwords for all demo accounts are \`password123\`.
+You can test the end-to-end flow using these seeded demo accounts. The passwords for all demo accounts are `Demo@1234`. Workers can also log in via OTP with code `1234`.
 
 | Role | Email | Profile Configuration | Expected Risk |
 |------|-------|-----------------------|---------------|
-| Worker 1 | \`worker1@heatguard.com\` | Construction, Heavy, Full Sun | ORANGE (High Risk) |
-| Worker 2 | \`worker2@heatguard.com\` | Delivery, Moderate, Full Sun | YELLOW (Caution) |
-| Supervisor | \`supervisor@heatguard.com\` | Oversees Site 1 & 3 | N/A |
-| Authority | \`authority@heatguard.com\` | District Overseer | N/A |
+| Worker 1 | `demo.worker1@heatguard.dev` | Construction, Heavy, Full Sun | ORANGE (High Risk) |
+| Worker 2 | `demo.worker2@heatguard.dev` | Delivery, Moderate, Full Sun | YELLOW (Caution) |
+| Supervisor | `demo.supervisor1@heatguard.dev` | Oversees Site 1 & 3 | N/A |
+| Authority | `demo.authority1@heatguard.dev` | District Overseer | N/A |
 
 *Note: For the exact flow and talking points, please refer to \`DEMO_SCRIPT.md\`.*
