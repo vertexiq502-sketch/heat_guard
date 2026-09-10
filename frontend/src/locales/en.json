@@ -106,6 +106,7 @@
   "stale_weather_warning": "Weather data is currently delayed; assessment confidence is reduced.",
   "guidance_shade": "Move to shade or cooler area when possible",
   "guidance_rest": "Take appropriate scheduled rest breaks",
+  "guidance_hydrate": "Drink cool water or ORS regularly",
   "guidance_supervisor": "Inform your supervisor immediately if you feel unwell",
   "voice_alert_intro": "Heat safety alert.",
   "voice_env_temp_humidity": "The current temperature is {temperature} degrees Celsius and humidity is {humidity} percent.",

@@ -2,11 +2,34 @@ import en from '../locales/en.json';
 import te from '../locales/te.json';
 import hi from '../locales/hi.json';
 
-export type SupportedLang = 'en' | 'te' | 'hi';
+export type SupportedLanguage = 'en' | 'te' | 'hi';
+export type SupportedLang = SupportedLanguage; // alias for backwards compatibility
 
-const translations: Record<SupportedLang, Record<string, string>> = { en, te, hi };
+const translations: Record<SupportedLanguage, Record<string, string>> = { en, te, hi };
 
-export interface VoiceAlertContext {
+export interface VoiceAlertInput {
+  temperature?: number | null;
+  humidity?: number | null;
+  windSpeed?: number | null;
+  uvIndex?: number | null;
+  riskScore?: number | null;
+  riskCategory?: string | null;
+  confidence?: string | null;
+  isStale?: boolean | null;
+  factors?: {
+    exposure?: string | null;
+    intensity?: string | null;
+    duration?: string | null;
+    clothing?: string | null;
+    isUnacclimatized?: boolean | null;
+  } | null;
+  recommendations?: {
+    workStatus?: string;
+    restInstruction?: string;
+    hydrationInstruction?: string;
+    additionalGuidance?: string;
+  } | null;
+  // Legacy context objects from API for full backward compatibility:
   weather?: {
     temperature?: number;
     humidity?: number;
@@ -45,71 +68,78 @@ export interface VoiceAlertContext {
     title_hi?: string;
     message_hi?: string;
   } | null;
+  workerLanguage?: string | null;
 }
 
+export type VoiceAlertContext = VoiceAlertInput;
+
 /**
- * Normalizes and resolves the user's active language preference.
- * Checks UI language, localStorage, worker profile, and authStore.
+ * Normalizes any language input into strictly 'en' | 'te' | 'hi'.
+ * Follows the authoritative worker profile / preference.
  */
-export function resolveUserLanguage(
-  profile?: { language?: string | null; preferred_language?: string | null } | null,
-  authUser?: { language?: string | null; preferred_language?: string | null } | null,
-  uiLanguage?: string | null
-): SupportedLang {
-  const normalize = (val?: string | null): SupportedLang | null => {
+export function resolveWorkerLanguage(input?: any): SupportedLanguage {
+  const normalize = (val?: any): SupportedLanguage | null => {
     if (!val) return null;
-    const l = val.toLowerCase().trim();
-    if (l === 'te' || l.startsWith('te-') || l.startsWith('te_') || l.includes('telugu')) return 'te';
-    if (l === 'hi' || l.startsWith('hi-') || l.startsWith('hi_') || l.includes('hindi')) return 'hi';
-    if (l === 'en' || l.startsWith('en-') || l.startsWith('en_') || l.includes('english')) return 'en';
+    const str = String(val).toLowerCase().trim();
+    if (str === 'te' || str.startsWith('te-') || str.startsWith('te_') || str.includes('telugu')) {
+      return 'te';
+    }
+    if (str === 'hi' || str.startsWith('hi-') || str.startsWith('hi_') || str.includes('hindi')) {
+      return 'hi';
+    }
+    if (str === 'en' || str.startsWith('en-') || str.startsWith('en_') || str.includes('english')) {
+      return 'en';
+    }
     return null;
   };
 
-  // 1. Current UI language if user explicitly selected in language switcher
-  const fromUi = normalize(uiLanguage);
-  if (fromUi) return fromUi;
-
-  // 2. Saved preference in localStorage
-  if (typeof window !== 'undefined') {
-    try {
-      const fromStorage = normalize(localStorage.getItem('heatguard_lang'));
-      if (fromStorage) return fromStorage;
-    } catch {
-      // Ignore
-    }
+  // If input is an object, extract language property
+  let candidate = input;
+  if (input && typeof input === 'object') {
+    candidate = input.language || input.preferred_language || input.preferredLanguage || input.lang;
   }
 
-  // 3. User profile from API
-  const fromProfile = normalize(profile?.language) || normalize(profile?.preferred_language);
-  if (fromProfile) return fromProfile;
+  const normalized = normalize(candidate);
+  if (normalized) return normalized;
 
-  // 4. User from AuthStore
-  const fromAuth = normalize(authUser?.language) || normalize(authUser?.preferred_language);
-  if (fromAuth) return fromAuth;
+  // Fallback to localStorage if in browser environment
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = normalize(localStorage.getItem('heatguard_lang'));
+      if (stored) return stored;
+    } catch {
+      // Ignore storage access errors
+    }
+  }
 
   return 'en';
 }
 
+// Export alias for backward compatibility
+export const resolveUserLanguage = resolveWorkerLanguage;
+
 /**
- * Returns the standard BCP-47 speech locale for speech synthesis.
+ * Returns the exact BCP-47 speech locale for Web Speech API.
  */
 export function getSpeechLocale(lang: string): string {
-  const normalized = (lang || '').toLowerCase().trim();
-  if (normalized.startsWith('te')) return 'te-IN';
-  if (normalized.startsWith('hi')) return 'hi-IN';
-  return 'en-IN';
+  const normalized = resolveWorkerLanguage(lang);
+  switch (normalized) {
+    case 'te': return 'te-IN';
+    case 'hi': return 'hi-IN';
+    case 'en': return 'en-IN';
+  }
 }
 
 /**
- * Retrieves a localized string for the specified language with fallback.
+ * Looks up a translation key from the specific language dictionary.
  */
-export function getTranslation(lang: SupportedLang, key: string, fallback?: string): string {
+export function getTranslation(lang: SupportedLanguage, key: string, fallback?: string): string {
   const dict = translations[lang] || translations.en;
   return dict[key] || translations.en[key] || fallback || key;
 }
 
 /**
- * Replaces {param} placeholders in localized templates with actual dynamic values.
+ * Replaces {param} placeholders with dynamic numeric or textual values.
  */
 export function formatTemplate(template: string, params: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => {
@@ -118,44 +148,36 @@ export function formatTemplate(template: string, params: Record<string, string |
 }
 
 /**
- * Generates natural, accessible spoken text strictly in the worker's selected language.
- * Uses existing localization JSON keys and dynamic data interpolation.
+ * Primary Spoken Message Generator.
+ * Receives current worker environment, risk assessment, and profile,
+ * and returns the 100% pre-translated spoken text and resolved language.
+ *
+ * Guaranteed:
+ * - When language is 'te', returned text is in natural Telugu script.
+ * - When language is 'hi', returned text is in natural Devanagari Hindi script.
+ * - When language is 'en', returned text is in English.
+ * - Speech synthesis NEVER has to translate or modify the text.
  */
-export function generateVoiceAlertScript(
-  ctx: VoiceAlertContext,
-  language: string
-): string {
-  const lang: SupportedLang = resolveUserLanguage(ctx.profile, null, language);
-  const weather = ctx.weather;
-  const risk = ctx.risk;
-  const profile = ctx.profile;
+export function buildLocalizedVoiceAlert(
+  data: VoiceAlertInput,
+  language?: string
+): { text: string; language: SupportedLanguage } {
+  // Resolve authoritative language
+  const targetLang = resolveWorkerLanguage(
+    language || data.workerLanguage || data.profile?.language || data.profile?.preferred_language
+  );
 
-  const segments: string[] = [];
+  // Extract real environmental telemetry
+  const weather = data.weather;
+  const tempRaw = data.temperature !== undefined && data.temperature !== null ? data.temperature : weather?.temperature;
+  const humidityRaw = data.humidity !== undefined && data.humidity !== null ? data.humidity : weather?.humidity;
 
-  // 1. Alert Intro Header
-  segments.push(getTranslation(lang, 'voice_alert_intro'));
+  const temp = tempRaw !== undefined && tempRaw !== null && !isNaN(tempRaw) ? Math.round(tempRaw) : null;
+  const humidity = humidityRaw !== undefined && humidityRaw !== null && !isNaN(humidityRaw) ? Math.round(humidityRaw) : null;
 
-  // 2. Telemetry: Temperature & Humidity
-  const temp = weather?.temperature !== undefined ? Math.round(weather.temperature) : null;
-  const humidity = weather?.humidity !== undefined ? Math.round(weather.humidity) : null;
-
-  if (temp !== null && humidity !== null) {
-    segments.push(
-      formatTemplate(getTranslation(lang, 'voice_env_temp_humidity'), {
-        temperature: temp,
-        humidity: humidity,
-      })
-    );
-  } else if (temp !== null) {
-    segments.push(
-      formatTemplate(getTranslation(lang, 'voice_env_temp_only'), {
-        temperature: temp,
-      })
-    );
-  }
-
-  // 3. Normalized Risk Level & Risk Score
-  const rawLevel = (risk?.risk_level || 'green').toLowerCase();
+  // Extract personalized risk
+  const risk = data.risk;
+  const rawLevel = (data.riskCategory || risk?.risk_level || 'green').toLowerCase();
   const isDanger = rawLevel === 'red' || rawLevel === 'danger';
   const isHighRisk = rawLevel === 'orange' || rawLevel === 'high_risk';
   const isCaution = rawLevel === 'yellow' || rawLevel === 'caution';
@@ -168,97 +190,147 @@ export function generateVoiceAlertScript(
     ? 'caution'
     : 'safe';
 
-  const levelLabel = getTranslation(lang, levelKey);
+  const levelLabel = getTranslation(targetLang, levelKey);
 
-  const score =
-    risk?.risk_score !== undefined
-      ? Math.round(risk.risk_score)
-      : risk?.effective_temp !== undefined
-      ? Math.round(risk.effective_temp)
-      : null;
+  const rawScore = data.riskScore !== undefined && data.riskScore !== null
+    ? data.riskScore
+    : risk?.risk_score !== undefined && risk?.risk_score !== null
+    ? risk.risk_score
+    : risk?.effective_temp !== undefined && risk?.effective_temp !== null
+    ? risk.effective_temp
+    : null;
 
+  const score = rawScore !== null && !isNaN(rawScore) ? Math.round(rawScore) : null;
+
+  // Extract freshness / confidence
+  const isStale =
+    data.isStale === true ||
+    weather?.is_stale === true ||
+    data.confidence === 'low' ||
+    weather?.confidence === 'low' ||
+    risk?.confidence === 'low';
+
+  // Extract worker factors
+  const profile = data.profile;
+  const factors = data.factors;
+  const exposure = factors?.exposure || profile?.exposure;
+  const intensity = factors?.intensity || profile?.intensity;
+  const duration = factors?.duration || profile?.duration;
+  const clothing = factors?.clothing || profile?.clothing;
+  const isUnacclimatized = factors?.isUnacclimatized ?? profile?.is_unacclimatized;
+
+  const segments: string[] = [];
+
+  // 1. Alert Intro Header
+  segments.push(getTranslation(targetLang, 'voice_alert_intro'));
+
+  // 2. Telemetry (Current temperature & humidity)
+  if (temp !== null && humidity !== null) {
+    segments.push(
+      formatTemplate(getTranslation(targetLang, 'voice_env_temp_humidity'), {
+        temperature: temp,
+        humidity: humidity,
+      })
+    );
+  } else if (temp !== null) {
+    segments.push(
+      formatTemplate(getTranslation(targetLang, 'voice_env_temp_only'), {
+        temperature: temp,
+      })
+    );
+  }
+
+  // 3. Personalized Heat-Risk Level & Score
   if (score !== null) {
     segments.push(
-      formatTemplate(getTranslation(lang, 'voice_risk_level_score'), {
+      formatTemplate(getTranslation(targetLang, 'voice_risk_level_score'), {
         level: levelLabel,
         score,
       })
     );
   } else {
     segments.push(
-      formatTemplate(getTranslation(lang, 'voice_risk_level_only'), {
+      formatTemplate(getTranslation(targetLang, 'voice_risk_level_only'), {
         level: levelLabel,
       })
     );
   }
 
   // 4. Stale Weather / Reduced Confidence Notice
-  const isStale =
-    weather?.is_stale === true ||
-    weather?.confidence === 'low' ||
-    risk?.confidence === 'low';
-
   if (isStale) {
-    segments.push(getTranslation(lang, 'voice_stale_warning'));
+    segments.push(getTranslation(targetLang, 'voice_stale_warning'));
   }
 
-  // 5. Worker-Specific Contributing Factors (Why worker has this risk)
+  // 5. Worker-Specific Contributing Factors
   if (isDanger || isHighRisk || isCaution) {
     const factorList: string[] = [];
 
-    // Environmental heat
+    // Ambient heat
     if (temp !== null && temp >= 37) {
-      factorList.push(getTranslation(lang, 'voice_factor_high_heat'));
+      factorList.push(getTranslation(targetLang, 'voice_factor_high_heat'));
     }
 
     // Direct Sun Exposure
-    if (profile?.exposure === 'fullSun') {
-      factorList.push(getTranslation(lang, 'voice_factor_sun'));
-    } else if (profile?.exposure === 'partialShade') {
-      factorList.push(getTranslation(lang, 'voice_factor_partial_sun'));
+    if (exposure === 'fullSun') {
+      factorList.push(getTranslation(targetLang, 'voice_factor_sun'));
+    } else if (exposure === 'partialShade') {
+      factorList.push(getTranslation(targetLang, 'voice_factor_partial_sun'));
     }
 
     // Workload Intensity
-    if (profile?.intensity === 'heavy') {
-      factorList.push(getTranslation(lang, 'voice_factor_heavy_work'));
-    } else if (profile?.intensity === 'moderate') {
-      factorList.push(getTranslation(lang, 'voice_factor_moderate_work'));
+    if (intensity === 'heavy') {
+      factorList.push(getTranslation(targetLang, 'voice_factor_heavy_work'));
+    } else if (intensity === 'moderate') {
+      factorList.push(getTranslation(targetLang, 'voice_factor_moderate_work'));
     }
 
     // Exposure Duration
-    if (profile?.duration === 'prolonged') {
-      factorList.push(getTranslation(lang, 'voice_factor_prolonged_exposure'));
+    if (duration === 'prolonged') {
+      factorList.push(getTranslation(targetLang, 'voice_factor_prolonged_exposure'));
     }
 
-    // Clothing / PPE
-    if (profile?.clothing === 'heavyPPE' || profile?.clothing === 'moderatePPE') {
-      factorList.push(getTranslation(lang, 'voice_factor_ppe'));
+    // Protective Gear Burden
+    if (clothing === 'heavyPPE' || clothing === 'moderatePPE') {
+      factorList.push(getTranslation(targetLang, 'voice_factor_ppe'));
     }
 
-    // Unacclimatized
-    if (profile?.is_unacclimatized) {
-      factorList.push(getTranslation(lang, 'voice_factor_unacclimatized'));
+    // Unacclimatized Status
+    if (isUnacclimatized) {
+      factorList.push(getTranslation(targetLang, 'voice_factor_unacclimatized'));
     }
 
     if (factorList.length > 0) {
-      const joiner = lang === 'te' ? ' మరియు ' : lang === 'hi' ? ' और ' : ', and ';
+      const joiner = targetLang === 'te' ? ' మరియు ' : targetLang === 'hi' ? ' और ' : ', and ';
       const joinedFactors = factorList.join(joiner);
       segments.push(
-        formatTemplate(getTranslation(lang, 'voice_risk_reasons'), {
+        formatTemplate(getTranslation(targetLang, 'voice_risk_reasons'), {
           factors: joinedFactors,
         })
       );
     }
   }
 
-  // 6. Actionable Wellness & Safety Recommendations
+  // 6. Actionable Wellness & Safety Guidance
   if (isDanger) {
-    segments.push(getTranslation(lang, 'voice_guidance_danger'));
+    segments.push(getTranslation(targetLang, 'voice_guidance_danger'));
   } else if (isHighRisk || isCaution) {
-    segments.push(getTranslation(lang, 'voice_guidance_high_risk'));
+    segments.push(getTranslation(targetLang, 'voice_guidance_high_risk'));
   } else {
-    segments.push(getTranslation(lang, 'voice_guidance_safe'));
+    segments.push(getTranslation(targetLang, 'voice_guidance_safe'));
   }
 
-  return segments.join(' ').trim();
+  return {
+    text: segments.join(' ').trim(),
+    language: targetLang,
+  };
+}
+
+/**
+ * Backward compatibility wrapper for existing component callers.
+ */
+export function generateVoiceAlertScript(
+  ctx: VoiceAlertContext,
+  language: string
+): string {
+  return buildLocalizedVoiceAlert(ctx, language).text;
 }

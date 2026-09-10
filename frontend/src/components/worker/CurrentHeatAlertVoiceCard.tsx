@@ -3,8 +3,8 @@ import { useLocalization } from '../../hooks/useLocalization';
 import { useSpeechSynthesis } from '../../hooks/useSpeechSynthesis';
 import { useAuthStore } from '../../store/authStore';
 import {
-  generateVoiceAlertScript,
-  resolveUserLanguage,
+  buildLocalizedVoiceAlert,
+  resolveWorkerLanguage,
   type VoiceAlertContext,
 } from '../../utils/voiceAlertGenerator';
 import {
@@ -41,11 +41,9 @@ export const CurrentHeatAlertVoiceCard: React.FC<CurrentHeatAlertVoiceCardProps>
   const { isSupported, isSpeaking, voiceUnavailable, speak, stop } = useSpeechSynthesis();
   const authUser = useAuthStore((state) => state.user);
 
-  // Authoritative language resolution: checks active UI selection, localStorage, worker profile, and authStore
-  const effectiveLanguage = resolveUserLanguage(
-    { ...profile, language: workerLanguage || profile?.language },
-    authUser,
-    uiLanguage
+  // Authoritative language resolution: checks active UI selection, worker profile, and authStore
+  const effectiveLanguage = resolveWorkerLanguage(
+    uiLanguage || workerLanguage || profile?.language || (profile as any)?.preferred_language || authUser?.language
   );
 
   // Normalize risk data
@@ -108,16 +106,16 @@ export const CurrentHeatAlertVoiceCard: React.FC<CurrentHeatAlertVoiceCardProps>
     };
   }
 
-  // Handle Speech Toggle
+  // Handle Speech Toggle: uses buildLocalizedVoiceAlert before speech
   const handleToggleVoice = () => {
     if (isSpeaking) {
       stop();
     } else {
-      const script = generateVoiceAlertScript(
+      const alertData = buildLocalizedVoiceAlert(
         { weather, risk, profile, alert },
         effectiveLanguage
       );
-      speak(script, effectiveLanguage);
+      speak(alertData.text, alertData.language);
     }
   };
 
@@ -329,8 +327,12 @@ export const CurrentHeatAlertVoiceCard: React.FC<CurrentHeatAlertVoiceCardProps>
           <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-900 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-yellow-700 shrink-0 mt-0.5" />
             <p>
-              {t('voice_unavailable') ||
-                'Voice guidance is not available on this device. Please read the safety guidance below.'}
+              {effectiveLanguage === 'te'
+                ? 'ఈ పరికరంలో తెలుగు వాయిస్ సదుపాయం అందుబాటులో లేదు. దయచేసి క్రింది భద్రతా మార్గదర్శకాలను చదవండి.'
+                : effectiveLanguage === 'hi'
+                ? 'इस डिवाइस पर हिंदी वॉयस मार्गदर्शन उपलब्ध नहीं है। कृपया नीचे दिए गए सुरक्षा निर्देश पढ़ें।'
+                : (t('voice_unavailable') ||
+                    'Voice guidance is not available on this device. Please read the safety guidance below.')}
             </p>
           </div>
         )}

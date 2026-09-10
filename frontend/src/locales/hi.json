@@ -106,6 +106,7 @@
   "stale_weather_warning": "मौसम का डेटा विलंबित है; आकलन की विश्वसनीयता कम है।",
   "guidance_shade": "संभव होने पर छाया या ठंडे स्थान पर जाएं",
   "guidance_rest": "समय पर उचित विश्राम लें",
+  "guidance_hydrate": "नियमित रूप से ठंडा पानी या ओआरएस पिएं",
   "guidance_supervisor": "अस्वस्थ महसूस होने पर तुरंत अपने सुपरवाइजर को सूचित करें",
   "voice_alert_intro": "हीट सुरक्षा अलर्ट।",
   "voice_env_temp_humidity": "वर्तमान तापमान {temperature} डिग्री सेल्सियस और नमी {humidity} प्रतिशत है।",

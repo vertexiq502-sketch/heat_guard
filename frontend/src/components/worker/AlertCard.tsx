@@ -43,11 +43,9 @@ export const AlertCard = ({
   const [isAcknowledgedLocally, setIsAcknowledgedLocally] = useState(false);
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
-  // Authoritative language resolution: checks active UI, localStorage, profile, and authStore
+  // Authoritative language resolution: checks active UI, worker language, and authStore
   const effectiveLanguage = resolveUserLanguage(
-    { language: workerLanguage },
-    authUser,
-    uiLanguage
+    uiLanguage || workerLanguage || authUser?.language
   );
 
   // Consistent Severity Terminology: SAFE, CAUTION, DANGER
@@ -165,14 +163,14 @@ export const AlertCard = ({
 
     window.speechSynthesis.cancel(); // cancel any active speech
 
-    // Clean title and message of emojis and non-speech symbols before speaking
-    const cleanTitle = title.replace(/[^\p{L}\p{N}\s,.:-]/gu, '').trim();
-    const cleanMessage = message.replace(/[^\p{L}\p{N}\s,.:-]/gu, '').trim();
+    // Clean title and message of emojis while preserving Indic matras (\p{M}) and letters (\p{L})
+    const cleanTitle = title.replace(/[^\p{L}\p{M}\p{N}\s,.:!?।-]/gu, '').trim();
+    const cleanMessage = message.replace(/[^\p{L}\p{M}\p{N}\s,.:!?।-]/gu, '').trim();
     const speechText = `${cleanTitle}. ${cleanMessage}`;
 
     const utterance = new SpeechSynthesisUtterance(speechText);
 
-    // Set voice language matching the worker's selected language from users table
+    // Set voice language matching the worker's selected language
     if (effectiveLanguage === 'te') {
       utterance.lang = 'te-IN';
     } else if (effectiveLanguage === 'hi') {
@@ -188,27 +186,44 @@ export const AlertCard = ({
     if (effectiveLanguage === 'te') {
       matchedVoice = voices.find(
         (v) =>
-          v.lang === 'te-IN' ||
-          v.lang === 'te' ||
+          v.lang.toLowerCase() === 'te-in' ||
+          v.lang.toLowerCase() === 'te_in' ||
           v.lang.toLowerCase().startsWith('te-') ||
+          v.lang.toLowerCase() === 'te' ||
           v.name.toLowerCase().includes('telugu')
       );
     } else if (effectiveLanguage === 'hi') {
       matchedVoice = voices.find(
         (v) =>
-          v.lang === 'hi-IN' ||
-          v.lang === 'hi' ||
+          v.lang.toLowerCase() === 'hi-in' ||
+          v.lang.toLowerCase() === 'hi_in' ||
           v.lang.toLowerCase().startsWith('hi-') ||
+          v.lang.toLowerCase() === 'hi' ||
           v.name.toLowerCase().includes('hindi')
       );
     } else {
       matchedVoice = voices.find(
         (v) =>
-          v.lang === 'en-IN' ||
-          v.name.toLowerCase().includes('india') ||
-          v.lang === 'en-US' ||
-          v.lang.startsWith('en')
+          v.lang.toLowerCase() === 'en-in' ||
+          v.lang.toLowerCase() === 'en_in' ||
+          (v.name.toLowerCase().includes('india') && v.lang.toLowerCase().startsWith('en')) ||
+          v.lang.toLowerCase() === 'en-us' ||
+          v.lang.toLowerCase().startsWith('en')
       );
+    }
+
+    // Do NOT allow an English voice to speak Telugu or Hindi
+    if ((effectiveLanguage === 'te' || effectiveLanguage === 'hi') && !matchedVoice) {
+      const hasAnyVoice = voices.some(
+        (v) =>
+          v.lang.toLowerCase().startsWith(effectiveLanguage) ||
+          v.name.toLowerCase().includes(effectiveLanguage === 'te' ? 'telugu' : 'hindi')
+      );
+      if (!hasAnyVoice) {
+        console.warn(`[AlertCard Voice] Suppressing English fallback voice: Device has no installed voice for ${effectiveLanguage}`);
+        setIsPlayingVoice(false);
+        return;
+      }
     }
 
     if (matchedVoice) {
@@ -217,6 +232,15 @@ export const AlertCard = ({
 
     utterance.rate = 0.95; // slightly slower for emergency clarity
     utterance.pitch = 1.05;
+
+    if (import.meta.env.DEV) {
+      console.log('VOICE DEBUG (AlertCard)', {
+        language: effectiveLanguage,
+        locale: utterance.lang,
+        text: speechText,
+        voice: matchedVoice ? `${matchedVoice.name} (${matchedVoice.lang})` : 'System Default',
+      });
+    }
 
     utterance.onstart = () => setIsPlayingVoice(true);
     utterance.onend = () => setIsPlayingVoice(false);
