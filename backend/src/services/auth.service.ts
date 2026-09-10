@@ -1,4 +1,6 @@
 import { supabase, supabaseAuth } from '../config/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { config } from '../config';
 
 // TODO: Replace demo OTP verification with real Supabase/production OTP authentication before production deployment.
 export const DEMO_OTP = '1234';
@@ -133,7 +135,10 @@ export class AuthService {
     }
 
     const emailOtp = linkRes.data.properties.email_otp;
-    const verifyRes = await supabase.auth.verifyOtp({
+    const tempAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const verifyRes = await tempAuth.auth.verifyOtp({
       email: user.email,
       token: emailOtp,
       type: 'magiclink'

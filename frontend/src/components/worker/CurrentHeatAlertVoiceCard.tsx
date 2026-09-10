@@ -253,6 +253,15 @@ export const CurrentHeatAlertVoiceCard: React.FC<CurrentHeatAlertVoiceCardProps>
 
         {/* Environmental Telemetry Pills */}
         <div className="lg:col-span-5 flex flex-wrap lg:justify-end gap-2 text-xs">
+          {risk?.effective_temp !== undefined && (
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/90 border border-orange-200/80 shadow-xs">
+              <Flame className="w-4 h-4 text-orange-600" />
+              <div>
+                <p className="text-2xs text-gray-400 font-semibold">{t('effective_temp') || 'Effective Temp'}</p>
+                <p className="font-bold text-orange-700">{risk.effective_temp.toFixed(1)}°C</p>
+              </div>
+            </div>
+          )}
           {temp !== null && (
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/90 border border-gray-200/80 shadow-xs">
               <Thermometer className="w-4 h-4 text-orange-500" />

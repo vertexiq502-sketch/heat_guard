@@ -7,4 +7,7 @@ export interface WeatherData {
   condition?: string;
   source: 'open-meteo' | 'cache' | 'simulated';
   timestamp: string;
+  confidence?: 'high' | 'medium' | 'low';
+  is_stale?: boolean;
+  isStale?: boolean;
 }

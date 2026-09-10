@@ -3,11 +3,14 @@ import { useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
+import { useLocationStore } from '../store/locationStore';
 import { setAppLanguage } from './useLocalization';
 
 // ─── Worker Dashboard ──────────────────────────────────────────────────────────
-export const useWorkerData = () => {
+export const useWorkerData = (explicitCoords?: { latitude: number; longitude: number } | null) => {
   const queryClient = useQueryClient();
+  const storedLocation = useLocationStore((state) => state.location);
+  const coords = explicitCoords || storedLocation;
 
   // Supabase Realtime: invalidate on new risk assessments or alerts for this worker
   useEffect(() => {
@@ -27,9 +30,14 @@ export const useWorkerData = () => {
   }, [queryClient]);
 
   return useQuery({
-    queryKey: ['workerDashboard'],
+    queryKey: ['workerDashboard', coords?.latitude, coords?.longitude],
     queryFn: async () => {
-      const response = await apiClient.get('/dashboard/worker');
+      const params: Record<string, number> = {};
+      if (coords?.latitude !== undefined && coords?.longitude !== undefined) {
+        params.latitude = coords.latitude;
+        params.longitude = coords.longitude;
+      }
+      const response = await apiClient.get('/dashboard/worker', { params });
       const profile = response.data?.profile;
       const storedLang = typeof window !== 'undefined' ? localStorage.getItem('heatguard_lang') : null;
       const profileLang = profile?.language || profile?.preferred_language;

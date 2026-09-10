@@ -30,6 +30,12 @@ dashboardRoutes.get('/worker', authenticate, authorizeRole('worker'), async (req
       .order('created_at', { ascending: false })
       .limit(10);
 
+    // Check if worker provided real-time GPS coordinates
+    const qLat = parseFloat(req.query.latitude as string);
+    const qLon = parseFloat(req.query.longitude as string);
+    const hasValidCoords =
+      !isNaN(qLat) && !isNaN(qLon) && qLat >= -90 && qLat <= 90 && qLon >= -180 && qLon <= 180;
+
     // 2. Get assigned site — include location and district so we can get real coords
     const { data: assignment } = await supabase
       .from('worker_assignments')
@@ -38,28 +44,7 @@ dashboardRoutes.get('/worker', authenticate, authorizeRole('worker'), async (req
       .eq('is_active', true)
       .single();
 
-    if (!assignment) {
-      return res.json({
-        profile: user,
-        site: null,
-        weather: null,
-        risk: null,
-        alerts: alerts || []
-      });
-    }
-
-    const site: any = assignment.sites;
-
-    // 3. Extract real coordinates from PostGIS geography
-    const { lat, lon } = resolveSiteCoords(site?.location, site?.district);
-
-    // 4. Get weather for the actual site coordinates
-    const weather = await weatherService.getCurrentWeather(lat, lon, assignment.site_id);
-
-    // 5. Calculate personalized risk using worker's profile from users table
-    const risk = await riskService.calculateRisk(user, assignment.site_id, weather);
-
-    // 6. Fetch worker's recent risk assessments from Supabase
+    // 3. Fetch worker's recent risk assessments from Supabase
     const { data: recentRisks } = await supabase
       .from('risk_assessments')
       .select('*')
@@ -67,13 +52,68 @@ dashboardRoutes.get('/worker', authenticate, authorizeRole('worker'), async (req
       .order('timestamp', { ascending: false })
       .limit(5);
 
+    if (!assignment) {
+      if (hasValidCoords) {
+        // Worker has no assigned site, but provided GPS coordinates: calculate live weather & risk!
+        const weather = await weatherService.getCurrentWeather(qLat, qLon);
+        const risk = await riskService.calculateRisk(user, null as any, weather);
+
+        return res.json({
+          profile: user,
+          site: {
+            id: 'current-location',
+            name: 'Current Location',
+            district: 'Current GPS Location',
+            isCurrentLocation: true,
+            lat: qLat,
+            lon: qLon,
+          },
+          weather,
+          risk,
+          recentRisks: recentRisks || [],
+          alerts: alerts || [],
+        });
+      }
+
+      return res.json({
+        profile: user,
+        site: null,
+        weather: null,
+        risk: null,
+        alerts: alerts || [],
+      });
+    }
+
+    const site: any = assignment.sites;
+
+    // 4. Extract real coordinates from GPS query or PostGIS geography
+    let lat: number;
+    let lon: number;
+    let isCurrentLocation = false;
+
+    if (hasValidCoords) {
+      lat = qLat;
+      lon = qLon;
+      isCurrentLocation = true;
+    } else {
+      const coords = resolveSiteCoords(site?.location, site?.district);
+      lat = coords.lat;
+      lon = coords.lon;
+    }
+
+    // 5. Get weather for coordinates (cached & Open-Meteo)
+    const weather = await weatherService.getCurrentWeather(lat, lon, assignment.site_id);
+
+    // 6. Calculate personalized risk using worker's profile
+    const risk = await riskService.calculateRisk(user, assignment.site_id, weather);
+
     res.json({
       profile: user,
-      site: { id: assignment.site_id, ...site, lat, lon },
+      site: { id: assignment.site_id, ...site, lat, lon, isCurrentLocation },
       weather,
       risk,
       recentRisks: recentRisks || [],
-      alerts: alerts || []
+      alerts: alerts || [],
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

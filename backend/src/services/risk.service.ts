@@ -55,8 +55,11 @@ export class RiskService {
       timestamp: new Date().toISOString()
     };
 
-    const { data } = await supabase.from('risk_assessments').insert(assessment).select().single();
-    return data;
+    const { data, error } = await supabase.from('risk_assessments').insert(assessment).select().single();
+    if (error) {
+      console.warn('RiskService: Could not persist assessment, falling back to in-memory result:', error.message);
+    }
+    return data || assessment;
   }
 }
 
