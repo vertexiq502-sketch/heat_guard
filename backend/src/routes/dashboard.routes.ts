@@ -175,7 +175,7 @@ dashboardRoutes.post('/worker/record-risk', authenticate, authorizeRole('worker'
           ? 'प्रभावी तापमान 45°C से अधिक हो गया है। तुरंत काम रोकें और छायादार आश्रय में जाएं। ओआरएस और पानी पिएं।'
           : 'तापमान और हीट इंडेक्स चेतावनी स्तर पर पहुंच गया है। अधिक पानी पिएं और छाया में नियमित विश्राम लें।',
         status: 'pending',
-        delivery_channel: 'voice',
+        delivery_channel: 'in_app',
         escalation_level: finalRiskLevel === 'red' ? 2 : 0,
         created_at: new Date().toISOString()
       };

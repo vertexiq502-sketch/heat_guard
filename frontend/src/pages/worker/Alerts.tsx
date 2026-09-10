@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useWorkerData } from '../../hooks/useDashboardData';
 import { useLocalization, setAppLanguage } from '../../hooks/useLocalization';
 import { AlertCard } from '../../components/worker/AlertCard';
+import { CurrentHeatAlertVoiceCard } from '../../components/worker/CurrentHeatAlertVoiceCard';
 import { LoadingSkeleton } from '../../components/ui/LoadingSkeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -90,13 +91,15 @@ export const Alerts = () => {
         </button>
       </header>
 
-      {/* Voice Information Banner */}
-      <div className="bg-purple-50/70 border border-purple-200 rounded-xl p-3.5 flex items-start gap-3 shadow-xs">
-        <Volume2 className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
-        <div className="text-xs text-purple-900 leading-relaxed">
-          <span className="font-bold">Multilingual Voice Alerts:</span> Voice alerts can be played aloud directly in your browser. Audio broadcasts automatically match your preferred language (English, Telugu, or Hindi). Click <span className="font-semibold">Play Voice Alert</span> on any card below to listen.
-        </div>
-      </div>
+      {/* ── Live Contextual Heat Voice Alert Component ──────────────────── */}
+      <CurrentHeatAlertVoiceCard
+        weather={data?.weather}
+        risk={data?.risk}
+        profile={data?.profile}
+        alert={alerts[0] || null}
+        workerLanguage={data?.profile?.language}
+        siteName={site?.name}
+      />
 
       {voiceSuccessMsg && (
         <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-sm">
@@ -105,23 +108,28 @@ export const Alerts = () => {
         </div>
       )}
 
-      {/* ── Alerts List ────────────────────────────────────── */}
-      {alerts.length === 0 ? (
-        <div className="bg-white p-8 rounded-2xl border border-gray-200 text-center shadow-sm">
-          <EmptyState message={t('no_alerts_msg')} icon="✅" />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {alerts.map((alert: any) => (
-            <AlertCard
-              key={alert.id}
-              alert={alert}
-              siteName={site?.name}
-              workerLanguage={data?.profile?.language}
-            />
-          ))}
-        </div>
-      )}
+      {/* ── Alerts Feed ────────────────────────────────────── */}
+      <div className="space-y-3">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+          {t('active_alerts')} ({alerts.length})
+        </h2>
+        {alerts.length === 0 ? (
+          <div className="bg-white p-8 rounded-2xl border border-gray-200 text-center shadow-sm">
+            <EmptyState message={t('no_alerts_msg')} icon="✅" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {alerts.map((alert: any) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                siteName={site?.name}
+                workerLanguage={data?.profile?.language}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

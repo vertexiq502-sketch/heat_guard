@@ -95,6 +95,17 @@
   "status": "Status",
   "site": "Site",
   "pending": "Pending",
-  "no_active_alerts": "No active alerts",
-  "acknowledged_at": "Acknowledged at"
+  "acknowledged_at": "Acknowledged at",
+  "listen_to_safety_alert": "Listen to safety alert",
+  "stop_listening": "Stop",
+  "voice_unavailable": "Voice guidance is not available on this device. Please read the safety guidance below.",
+  "current_heat_alert": "Current Heat Alert",
+  "risk_score": "Risk Score",
+  "why_receiving_risk": "Contributing Factors",
+  "safety_guidance": "Safety Guidance",
+  "stale_weather_warning": "Weather data is currently delayed; assessment confidence is reduced.",
+  "guidance_shade": "Move to shade or cooler area when possible",
+  "guidance_rest": "Take appropriate scheduled rest breaks",
+  "guidance_hydrate": "Drink cool water or ORS regularly",
+  "guidance_supervisor": "Inform your supervisor immediately if you feel unwell"
 }
