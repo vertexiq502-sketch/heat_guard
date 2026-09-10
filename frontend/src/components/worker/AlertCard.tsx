@@ -1,0 +1,283 @@
+import { useState, useEffect } from 'react';
+import { useLocalization } from '../../hooks/useLocalization';
+import { apiClient } from '../../api/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { Volume2, VolumeX, Radio, Check } from 'lucide-react';
+
+export interface AlertCardProps {
+  alert: {
+    id: string;
+    title: string;
+    message: string;
+    title_te?: string;
+    message_te?: string;
+    title_hi?: string;
+    message_hi?: string;
+    type?: string;
+    severity?: string;
+    status?: string;
+    created_at: string;
+    acknowledged_at?: string;
+    site_id?: string;
+    site_name?: string;
+    delivery_channel?: string;
+    sites?: { name?: string };
+  };
+  siteName?: string;
+  allowAcknowledge?: boolean;
+}
+
+export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCardProps) => {
+  const { t, language } = useLocalization();
+  const queryClient = useQueryClient();
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
+  const [isAcknowledgedLocally, setIsAcknowledgedLocally] = useState(false);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+
+  // Localized content
+  let title = alert.title;
+  let message = alert.message;
+  if (language === 'te' && alert.title_te) {
+    title = alert.title_te;
+    message = alert.message_te || message;
+  } else if (language === 'hi' && alert.title_hi) {
+    title = alert.title_hi;
+    message = alert.message_hi || message;
+  }
+
+  // Consistent Severity Terminology: SAFE, CAUTION, DANGER
+  const normType = (alert.type || '').toLowerCase();
+  const normSev = (alert.severity || '').toLowerCase();
+
+  let severityLabel = t('safe');
+  let borderClass = 'border-l-emerald-500';
+  let bgClass = 'bg-emerald-50';
+  let titleColor = 'text-emerald-950';
+  let messageColor = 'text-emerald-800';
+  let badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+  let icon = '✅';
+
+  if (normType === 'danger' || normSev === 'critical') {
+    severityLabel = t('danger');
+    borderClass = 'border-l-red-500';
+    bgClass = 'bg-red-50';
+    titleColor = 'text-red-950';
+    messageColor = 'text-red-800';
+    badgeClass = 'bg-red-100 text-red-800 border-red-200';
+    icon = '🚨';
+  } else if (normType === 'high_risk' || normType === 'caution' || normSev === 'warning') {
+    severityLabel = t('caution');
+    borderClass = 'border-l-amber-500';
+    bgClass = 'bg-amber-50';
+    titleColor = 'text-amber-950';
+    messageColor = 'text-amber-800';
+    badgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+    icon = '⚠️';
+  }
+
+  // Detect if this is a voice alert
+  const isVoiceAlert =
+    alert.delivery_channel === 'voice' ||
+    (alert.title && alert.title.toLowerCase().includes('voice')) ||
+    (alert.message && alert.message.toLowerCase().includes('voice'));
+
+  // Clean up any ongoing speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Web Speech API handler for voice alert playback
+  const handleToggleVoice = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      console.warn('Speech synthesis audio is not supported in this browser.');
+      return;
+    }
+
+    if (isPlayingVoice) {
+      window.speechSynthesis.cancel();
+      setIsPlayingVoice(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel(); // cancel any active speech
+
+    // Clean title of emoji before speaking
+    const cleanTitle = title.replace(/[^\p{L}\p{N}\s,.:-]/gu, '').trim();
+    const cleanMessage = message.replace(/[^\p{L}\p{N}\s,.:-]/gu, '').trim();
+    const speechText = `${cleanTitle}. ${cleanMessage}`;
+
+    const utterance = new SpeechSynthesisUtterance(speechText);
+
+    // Set voice language matching user preference
+    if (language === 'te') {
+      utterance.lang = 'te-IN';
+    } else if (language === 'hi') {
+      utterance.lang = 'hi-IN';
+    } else {
+      utterance.lang = 'en-IN';
+    }
+
+    utterance.rate = 0.95; // slightly slower for emergency clarity
+    utterance.pitch = 1.05;
+
+    utterance.onstart = () => setIsPlayingVoice(true);
+    utterance.onend = () => setIsPlayingVoice(false);
+    utterance.onerror = () => setIsPlayingVoice(false);
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Site name resolution
+  const resolvedSite = siteName || alert.site_name || alert.sites?.name;
+
+  // Timestamp formatting
+  const date = new Date(alert.created_at);
+  const formattedTime = !isNaN(date.getTime())
+    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
+  const formattedDate = !isNaN(date.getTime())
+    ? date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : '';
+
+  const isAcknowledged = isAcknowledgedLocally || alert.status === 'acknowledged';
+
+  const handleAcknowledge = async () => {
+    if (isAcknowledged || isAcknowledging) return;
+    setIsAcknowledging(true);
+    try {
+      await apiClient.post(`/alerts/${alert.id}/acknowledge`);
+      setIsAcknowledgedLocally(true);
+      queryClient.invalidateQueries({ queryKey: ['workerDashboard'] });
+    } catch (err) {
+      console.error('Failed to acknowledge alert:', err);
+    } finally {
+      setIsAcknowledging(false);
+    }
+  };
+
+  return (
+    <div className={`${bgClass} border-l-4 ${borderClass} p-4 rounded-2xl shadow-sm mb-3 border border-gray-200/70 transition-all space-y-2.5`}>
+      {/* Header: Severity Badge, Voice Badge, Status Badge & Timestamp */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${badgeClass}`}
+            aria-label={`Severity: ${severityLabel}`}
+          >
+            <span aria-hidden="true">{icon}</span>
+            <span>{severityLabel}</span>
+          </span>
+
+          {/* Voice Alert Indicator Badge */}
+          {isVoiceAlert && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+              <Radio className="w-3 h-3 text-purple-600 animate-pulse" />
+              Voice Alert
+            </span>
+          )}
+
+          {isAcknowledged ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+              <Check className="w-3 h-3 text-green-600" /> {t('acknowledged')}
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+              {t('pending')}
+            </span>
+          )}
+        </div>
+
+        <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+          {formattedDate} {formattedTime}
+        </span>
+      </div>
+
+      {/* Alert Title */}
+      <h3 className={`text-base font-bold ${titleColor} leading-snug`}>
+        {title}
+      </h3>
+
+      {/* Alert Message */}
+      <p className={`text-xs sm:text-sm ${messageColor} leading-relaxed`}>
+        {message}
+      </p>
+
+      {/* Spoken Voice Broadcast Waveform Banner (When playing) */}
+      {isPlayingVoice && (
+        <div className="flex items-center gap-2 py-1.5 px-3 bg-purple-100/90 border border-purple-300 rounded-xl text-xs text-purple-950 font-semibold animate-pulse">
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-3.5 bg-purple-600 rounded-full animate-bounce"></span>
+            <span className="w-1.5 h-5 bg-purple-600 rounded-full animate-bounce [animation-delay:0.15s]"></span>
+            <span className="w-1.5 h-3 bg-purple-600 rounded-full animate-bounce [animation-delay:0.3s]"></span>
+          </div>
+          <span>Playing audio broadcast ({language === 'te' ? 'Telugu' : language === 'hi' ? 'Hindi' : 'English'})...</span>
+        </div>
+      )}
+
+      {/* Footer: Site Info & Action Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-black/5 text-xs text-gray-600">
+        <div>
+          {resolvedSite && (
+            <span className="inline-flex items-center gap-1 font-medium text-gray-700">
+              <span aria-hidden="true">📍</span>
+              <span>{t('site')}: {resolvedSite}</span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Voice Playback Button */}
+          <button
+            onClick={handleToggleVoice}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition active:scale-95 ${
+              isPlayingVoice
+                ? 'bg-purple-600 text-white hover:bg-purple-700 ring-2 ring-purple-300'
+                : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
+            }`}
+            title="Listen to voice alert"
+          >
+            {isPlayingVoice ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5" />
+                <span>Stop Audio</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-purple-700" />
+                <span>Play Voice Alert</span>
+              </>
+            )}
+          </button>
+
+          {/* Acknowledge Button */}
+          {allowAcknowledge && !isAcknowledged && (
+            <button
+              onClick={handleAcknowledge}
+              disabled={isAcknowledging}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 hover:text-gray-900 active:scale-95 shadow-sm transition disabled:opacity-50"
+              aria-label={t('acknowledge')}
+            >
+              {isAcknowledging ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <span>{t('loading')}</span>
+                </>
+              ) : (
+                <>
+                  <span>✓</span>
+                  <span>{t('acknowledge')}</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

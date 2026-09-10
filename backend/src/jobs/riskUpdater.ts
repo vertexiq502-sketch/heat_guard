@@ -1,0 +1,1 @@
+export const runRiskUpdater = () => console.log('Risk updater started');

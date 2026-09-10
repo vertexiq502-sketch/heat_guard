@@ -1,0 +1,1 @@
+export const runEscalationChecker = () => console.log('Escalation checker started');

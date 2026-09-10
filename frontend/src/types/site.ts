@@ -1,0 +1,1 @@
+export interface Site { id: string; name: string; risk_level: string; }

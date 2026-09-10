@@ -1,0 +1,1 @@
+export const runAlertScheduler = () => console.log('Alert scheduler started');

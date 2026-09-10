@@ -1,0 +1,1 @@
+export interface RiskData { effective_temp: number; risk_level: string; recommendation: any; }
