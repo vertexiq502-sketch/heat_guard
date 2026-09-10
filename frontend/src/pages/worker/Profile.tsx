@@ -160,11 +160,10 @@ export const Profile = () => {
         {!isEditing && (
           <button
             onClick={handleEditClick}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm ${
-              isProfileIncomplete
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm ${isProfileIncomplete
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+              }`}
           >
             <Edit3 className="w-3.5 h-3.5" />
             {isProfileIncomplete ? 'Fill Worker Details' : t('edit_profile')}
@@ -265,8 +264,8 @@ export const Profile = () => {
               {profile.language === 'te'
                 ? 'Telugu (తెలుగు)'
                 : profile.language === 'hi'
-                ? 'Hindi (हिन्दी)'
-                : 'English'}
+                  ? 'Hindi (हिन्दी)'
+                  : 'English'}
             </p>
           )}
         </div>
