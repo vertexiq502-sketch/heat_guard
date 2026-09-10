@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocalization } from '../../hooks/useLocalization';
+import { useAuthStore } from '../../store/authStore';
 import { apiClient } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Volume2, VolumeX, Radio, Check } from 'lucide-react';
@@ -25,29 +26,56 @@ export interface AlertCardProps {
   };
   siteName?: string;
   allowAcknowledge?: boolean;
+  workerLanguage?: string;
 }
 
-export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCardProps) => {
-  const { t, language } = useLocalization();
+export const AlertCard = ({
+  alert,
+  siteName,
+  allowAcknowledge = true,
+  workerLanguage
+}: AlertCardProps) => {
+  const { t, language: uiLanguage } = useLocalization();
+  const authUser = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [isAcknowledgedLocally, setIsAcknowledgedLocally] = useState(false);
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
-  // Localized content
-  let title = alert.title;
-  let message = alert.message;
-  if (language === 'te' && alert.title_te) {
-    title = alert.title_te;
-    message = alert.message_te || message;
-  } else if (language === 'hi' && alert.title_hi) {
-    title = alert.title_hi;
-    message = alert.message_hi || message;
-  }
+  // The worker's selected language fetched from the users table (fallback to authStore, then uiLanguage)
+  const effectiveLanguage = (workerLanguage || authUser?.language || uiLanguage || 'en').toLowerCase().trim();
 
   // Consistent Severity Terminology: SAFE, CAUTION, DANGER
   const normType = (alert.type || '').toLowerCase();
   const normSev = (alert.severity || '').toLowerCase();
+
+  // Localized content strictly bound to the worker's selected language from users table
+  let title = alert.title;
+  let message = alert.message;
+
+  if (effectiveLanguage === 'te') {
+    title = alert.title_te || alert.title;
+    if (alert.message_te && /[\u0C00-\u0C7F]/.test(alert.message_te)) {
+      message = alert.message_te;
+    } else if (normType === 'danger' || normSev === 'critical') {
+      message = 'ఉష్ణోగ్రత 45 డిగ్రీలు దాటింది. వెంటనే బయట పని ఆపి నీడ ప్రదేశానికి వెళ్ళండి. పుష్కలంగా నీరు మరియు ఓఆర్ఎస్ త్రాగండి.';
+    } else if (normType === 'high_risk' || normType === 'caution' || normSev === 'warning') {
+      message = 'ఉష్ణోగ్రత మరియు వేడి సూచిక హెచ్చరిక స్థాయికి చేరుకున్నాయి. ప్రతి గంటకు నీరు త్రాగండి మరియు నీడలో విశ్రాంతి తీసుకోండి.';
+    } else {
+      message = alert.message_te || alert.message;
+    }
+  } else if (effectiveLanguage === 'hi') {
+    title = alert.title_hi || alert.title;
+    if (alert.message_hi && /[\u0900-\u097F]/.test(alert.message_hi)) {
+      message = alert.message_hi;
+    } else if (normType === 'danger' || normSev === 'critical') {
+      message = 'प्रभावी तापमान 45 डिग्री से अधिक हो गया है। तुरंत काम रोकें और छायादार आश्रय में जाएं। ओआरएस और पानी पिएं।';
+    } else if (normType === 'high_risk' || normType === 'caution' || normSev === 'warning') {
+      message = 'तापमान और हीट इंडेक्स चेतावनी स्तर पर पहुंच गया है। पर्याप्त पानी पिएं और छाया में नियमित विश्राम लें।';
+    } else {
+      message = alert.message_hi || alert.message;
+    }
+  }
 
   let severityLabel = t('safe');
   let borderClass = 'border-l-emerald-500';
@@ -81,8 +109,17 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
     (alert.title && alert.title.toLowerCase().includes('voice')) ||
     (alert.message && alert.message.toLowerCase().includes('voice'));
 
-  // Clean up any ongoing speech synthesis on unmount
+  // Clean up any ongoing speech synthesis on unmount and ensure browser voices are loaded
   useEffect(() => {
+    const handleVoices = () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+      }
+    };
+    handleVoices();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = handleVoices;
+    }
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -90,7 +127,7 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
     };
   }, []);
 
-  // Web Speech API handler for voice alert playback
+  // Web Speech API handler for voice alert playback in worker's selected language
   const handleToggleVoice = (e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -107,20 +144,54 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
 
     window.speechSynthesis.cancel(); // cancel any active speech
 
-    // Clean title of emoji before speaking
+    // Clean title and message of emojis and non-speech symbols before speaking
     const cleanTitle = title.replace(/[^\p{L}\p{N}\s,.:-]/gu, '').trim();
     const cleanMessage = message.replace(/[^\p{L}\p{N}\s,.:-]/gu, '').trim();
     const speechText = `${cleanTitle}. ${cleanMessage}`;
 
     const utterance = new SpeechSynthesisUtterance(speechText);
 
-    // Set voice language matching user preference
-    if (language === 'te') {
+    // Set voice language matching the worker's selected language from users table
+    if (effectiveLanguage === 'te') {
       utterance.lang = 'te-IN';
-    } else if (language === 'hi') {
+    } else if (effectiveLanguage === 'hi') {
       utterance.lang = 'hi-IN';
     } else {
       utterance.lang = 'en-IN';
+    }
+
+    // Select the best matching voice engine from available browser voices
+    const voices = window.speechSynthesis.getVoices();
+    let matchedVoice: SpeechSynthesisVoice | undefined;
+
+    if (effectiveLanguage === 'te') {
+      matchedVoice = voices.find(
+        (v) =>
+          v.lang === 'te-IN' ||
+          v.lang === 'te' ||
+          v.lang.toLowerCase().startsWith('te-') ||
+          v.name.toLowerCase().includes('telugu')
+      );
+    } else if (effectiveLanguage === 'hi') {
+      matchedVoice = voices.find(
+        (v) =>
+          v.lang === 'hi-IN' ||
+          v.lang === 'hi' ||
+          v.lang.toLowerCase().startsWith('hi-') ||
+          v.name.toLowerCase().includes('hindi')
+      );
+    } else {
+      matchedVoice = voices.find(
+        (v) =>
+          v.lang === 'en-IN' ||
+          v.name.toLowerCase().includes('india') ||
+          v.lang === 'en-US' ||
+          v.lang.startsWith('en')
+      );
+    }
+
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
     }
 
     utterance.rate = 0.95; // slightly slower for emergency clarity
@@ -178,7 +249,7 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
           {isVoiceAlert && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
               <Radio className="w-3 h-3 text-purple-600 animate-pulse" />
-              Voice Alert
+              Voice Alert • {effectiveLanguage === 'te' ? 'తెలుగు' : effectiveLanguage === 'hi' ? 'हिंदी' : 'English'}
             </span>
           )}
 
@@ -216,7 +287,15 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
             <span className="w-1.5 h-5 bg-purple-600 rounded-full animate-bounce [animation-delay:0.15s]"></span>
             <span className="w-1.5 h-3 bg-purple-600 rounded-full animate-bounce [animation-delay:0.3s]"></span>
           </div>
-          <span>Playing audio broadcast ({language === 'te' ? 'Telugu' : language === 'hi' ? 'Hindi' : 'English'})...</span>
+          <span>
+            Playing audio broadcast in{' '}
+            {effectiveLanguage === 'te'
+              ? 'Telugu (తెలుగు)'
+              : effectiveLanguage === 'hi'
+              ? 'Hindi (हिंदी)'
+              : 'English'}
+            ...
+          </span>
         </div>
       )}
 
@@ -240,7 +319,9 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
                 ? 'bg-purple-600 text-white hover:bg-purple-700 ring-2 ring-purple-300'
                 : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
             }`}
-            title="Listen to voice alert"
+            title={`Listen to voice alert in ${
+              effectiveLanguage === 'te' ? 'Telugu' : effectiveLanguage === 'hi' ? 'Hindi' : 'English'
+            }`}
           >
             {isPlayingVoice ? (
               <>
@@ -250,7 +331,9 @@ export const AlertCard = ({ alert, siteName, allowAcknowledge = true }: AlertCar
             ) : (
               <>
                 <Volume2 className="w-3.5 h-3.5 text-purple-700" />
-                <span>Play Voice Alert</span>
+                <span>
+                  Play Voice Alert ({effectiveLanguage === 'te' ? 'తెలుగు' : effectiveLanguage === 'hi' ? 'हिंदी' : 'English'})
+                </span>
               </>
             )}
           </button>

@@ -2,6 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../store/authStore';
+import { setAppLanguage } from './useLocalization';
 
 // ─── Worker Dashboard ──────────────────────────────────────────────────────────
 export const useWorkerData = () => {
@@ -28,6 +30,14 @@ export const useWorkerData = () => {
     queryKey: ['workerDashboard'],
     queryFn: async () => {
       const response = await apiClient.get('/dashboard/worker');
+      const profile = response.data?.profile;
+      if (profile?.language) {
+        setAppLanguage(profile.language);
+        const currentAuth = useAuthStore.getState().user;
+        if (currentAuth) {
+          useAuthStore.getState().setUser({ ...currentAuth, ...profile });
+        }
+      }
       return response.data;
     },
     staleTime: 5 * 60 * 1000,   // 5 minutes — weather service caches for 5 min

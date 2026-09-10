@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocalization } from '../../hooks/useLocalization';
+import { useLocalization, setAppLanguage } from '../../hooks/useLocalization';
 import { useWorkerData } from '../../hooks/useDashboardData';
 import { LoadingSkeleton } from '../../components/ui/LoadingSkeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -33,6 +33,13 @@ export const WorkerHome = () => {
   const [selectedRiskMode, setSelectedRiskMode] = useState<'live' | 'caution' | 'danger'>('live');
   const [isSavingToSupabase, setIsSavingToSupabase] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Sync worker's selected language from users table
+  useEffect(() => {
+    if (data?.profile?.language) {
+      setAppLanguage(data.profile.language);
+    }
+  }, [data?.profile?.language]);
 
   if (isLoading) {
     return (
@@ -320,7 +327,7 @@ export const WorkerHome = () => {
             ) : (
               <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
                 {alerts.map((alert: any) => (
-                  <AlertCard key={alert.id} alert={alert} />
+                  <AlertCard key={alert.id} alert={alert} workerLanguage={profile?.language} />
                 ))}
               </div>
             )}

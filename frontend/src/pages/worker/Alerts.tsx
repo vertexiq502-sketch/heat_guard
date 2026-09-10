@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWorkerData } from '../../hooks/useDashboardData';
-import { useLocalization } from '../../hooks/useLocalization';
+import { useLocalization, setAppLanguage } from '../../hooks/useLocalization';
 import { AlertCard } from '../../components/worker/AlertCard';
 import { LoadingSkeleton } from '../../components/ui/LoadingSkeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -16,6 +16,13 @@ export const Alerts = () => {
 
   const [isTriggeringVoice, setIsTriggeringVoice] = useState(false);
   const [voiceSuccessMsg, setVoiceSuccessMsg] = useState<string | null>(null);
+
+  // Sync worker's selected language from users table
+  useEffect(() => {
+    if (data?.profile?.language) {
+      setAppLanguage(data.profile.language);
+    }
+  }, [data?.profile?.language]);
 
   if (isLoading) {
     return (
@@ -106,7 +113,12 @@ export const Alerts = () => {
       ) : (
         <div className="space-y-4">
           {alerts.map((alert: any) => (
-            <AlertCard key={alert.id} alert={alert} siteName={site?.name} />
+            <AlertCard
+              key={alert.id}
+              alert={alert}
+              siteName={site?.name}
+              workerLanguage={data?.profile?.language}
+            />
           ))}
         </div>
       )}

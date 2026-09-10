@@ -167,11 +167,15 @@ dashboardRoutes.post('/worker/record-risk', authenticate, authorizeRole('worker'
         title: alertTitle,
         message: alertMsg,
         title_te: finalRiskLevel === 'red' ? 'ప్రమాదం: అత్యంత వేడి సూచిక' : 'జాగ్రత్త: పెరుగుతున్న వేడి సలహా',
-        message_te: alertMsg,
+        message_te: finalRiskLevel === 'red'
+          ? 'ఉష్ణోగ్రత 45 డిగ్రీలు దాటింది. వెంటనే బయట పని ఆపి నీడ ప్రదేశానికి వెళ్ళండి. పుష్కలంగా నీరు మరియు ఓఆర్ఎస్ త్రాగండి.'
+          : 'ఉష్ణోగ్రత మరియు వేడి సూచిక హెచ్చరిక స్థాయికి చేరుకున్నాయి. ప్రతి గంటకు నీరు త్రాగండి మరియు క్రమం తప్పకుండా నీడలో విశ్రాంతి తీసుకోండి.',
         title_hi: finalRiskLevel === 'red' ? 'खतरा: अत्यधिक गर्मी का जोखिम' : 'सावधानी: बढ़ती गर्मी की सलाह',
-        message_hi: alertMsg,
+        message_hi: finalRiskLevel === 'red'
+          ? 'प्रभावी तापमान 45°C से अधिक हो गया है। तुरंत काम रोकें और छायादार आश्रय में जाएं। ओआरएस और पानी पिएं।'
+          : 'तापमान और हीट इंडेक्स चेतावनी स्तर पर पहुंच गया है। अधिक पानी पिएं और छाया में नियमित विश्राम लें।',
         status: 'pending',
-        delivery_channel: 'in_app',
+        delivery_channel: 'voice',
         escalation_level: finalRiskLevel === 'red' ? 2 : 0,
         created_at: new Date().toISOString()
       };
